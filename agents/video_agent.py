@@ -37,43 +37,6 @@ W, H = config.VIDEO_WIDTH, config.VIDEO_HEIGHT
 
 # ── Stock footage fetchers ────────────────────────────────────
 
-@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
-def _pexels_search(query: str, n: int = 5) -> list[str]:
-    try:
-        r = requests.get("https://api.pexels.com/videos/search",
-            headers={"Authorization": config.PEXELS_API_KEY},
-            params={"query": query, "per_page": n, "orientation": "landscape", "size": "large"},
-            timeout=15)
-        r.raise_for_status()
-        urls = []
-        for v in r.json().get("videos", []):
-            files = sorted(v.get("video_files",[]), key=lambda f: f.get("height",0), reverse=True)
-            for f in files:
-                if f.get("link") and f.get("height",0) >= 720:
-                    urls.append(f["link"]); break
-        return urls
-    except requests.exceptions.RequestException as e:
-        log.warning(f"Pexels '{query}': {e}")
-        raise
-
-
-@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
-def _pixabay_search(query: str, n: int = 5) -> list[str]:
-    try:
-        r = requests.get("https://pixabay.com/api/videos/",
-            params={"key": config.PIXABAY_API_KEY, "q": query,
-                    "per_page": n, "video_type": "film"}, timeout=15)
-        r.raise_for_status()
-        urls = []
-        for hit in r.json().get("hits", []):
-            for q in ["large","medium","small"]:
-                url = hit.get("videos",{}).get(q,{}).get("url")
-                if url: urls.append(url); break
-        return urls
-    except requests.exceptions.RequestException as e:
-        log.warning(f"Pixabay '{query}': {e}")
-        raise
-
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
 def _fetch_music(mood: str = "ambient background") -> str | None:
@@ -102,29 +65,18 @@ def _fetch_music(mood: str = "ambient background") -> str | None:
     return None
 
 
-def _download_clip(url: str, dest: str) -> str | None:
-    try:
-        r = requests.get(url, stream=True, timeout=60)
-        r.raise_for_status()
-        path = os.path.join(dest, f"{uuid.uuid4().hex}.mp4")
-        with open(path, "wb") as f:
-            for chunk in r.iter_content(8192): f.write(chunk)
-        return path
-    except Exception as e:
-        log.warning(f"Download failed: {e}"); return None
-
-
 def _get_clip_for_query(query: str, dest: str) -> str | None:
-    """Pexels → Pixabay → niche fallback → None."""
-    clean = query[:60].split(",")[0].split("(")[0].strip()
-    for url in (_pexels_search(clean, 4) + _pixabay_search(clean, 3)):
-        path = _download_clip(url, dest)
-        if path: return path
+    from utils.stock_router import get_stock_video
+
+    path = get_stock_video(query, dest, 4)
+    if path: return path
+
     # fallback: generic niche search
-    for url in (_pexels_search(config.CHANNEL_NICHE, 3) + _pixabay_search("abstract background", 2)):
-        path = _download_clip(url, dest)
-        if path: return path
-    return None
+    path = get_stock_video(config.CHANNEL_NICHE, dest, 3)
+    if path: return path
+
+    path = get_stock_video("abstract background", dest, 2)
+    return path
 
 
 # ── Video effects ─────────────────────────────────────────────

@@ -97,45 +97,7 @@ def _post_process(audio: AudioSegment) -> AudioSegment:
     return audio
 
 
+# We delegate to the router now
 def generate_voice(script_text: str, job_id: str) -> str:
-    """
-    Generate full voiceover MP3.
-    Returns path to processed MP3.
-    """
-    os.makedirs(config.OUTPUT_AUDIO, exist_ok=True)
-    output_path = os.path.join(config.OUTPUT_AUDIO, f"{job_id}_voice.mp3")
-    voice       = config.get_tts_voice()
-    lang        = config.CHANNEL_LANGUAGE
-
-    log.info(f"🎙️  Voice: {voice} | lang: {lang}")
-
-    clean_text = _preprocess_text(script_text, lang)
-    chunks     = _split_text(clean_text)
-    log.info(f"   {len(chunks)} chunks to render")
-
-    tmp_files = []
-    for i, chunk in enumerate(chunks):
-        tmp = os.path.join(config.OUTPUT_AUDIO, f"_tmp_{job_id}_{i}.mp3")
-        log.info(f"   chunk {i+1}/{len(chunks)} ({len(chunk)} chars)")
-        asyncio.run(_tts_async(chunk, tmp, voice,
-                               config.TTS_RATE, config.TTS_VOLUME, config.TTS_PITCH))
-        tmp_files.append(tmp)
-
-    # Concatenate with subtle silence between sections
-    section_pause = AudioSegment.silent(duration=400)  # 400ms between sections
-    combined = AudioSegment.from_mp3(tmp_files[0])
-    for f in tmp_files[1:]:
-        combined = combined + section_pause + AudioSegment.from_mp3(f)
-
-    # Post-process for professional quality
-    combined = _post_process(combined)
-    combined.export(output_path, format="mp3", bitrate="192k",
-                    tags={"title": "AI Voice", "artist": config.CHANNEL_NAME})
-
-    for f in tmp_files:
-        try: os.remove(f)
-        except: pass
-
-    dur = len(combined) / 1000
-    log.success(f"Voice: {output_path} ({dur:.1f}s)")
-    return output_path
+    from utils.tts_router import generate_voice as router_generate_voice
+    return router_generate_voice(script_text, job_id)

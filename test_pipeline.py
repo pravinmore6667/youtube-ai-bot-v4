@@ -1,7 +1,7 @@
 import sys
 import logging
 from config import Config
-from pipeline import run_pipeline
+from pipeline import run
 
 # Fake environment variables to avoid validation errors
 Config.GEMINI_API_KEY = "test_key"

@@ -25,8 +25,10 @@ class GeminiKey:
 
     def mark_exhausted(self, cooldown_minutes: int = 30):
         self.failure_count += 1
+        # Set cooldown slightly in the future to mark it exhausted,
+        # but don't block the pool from moving to the next key.
         self.cooldown_until = time.time() + (cooldown_minutes * 60)
-        log.warning(f"Gemini Key #{self.index} exhausted. Cooldown for {cooldown_minutes} min.")
+        log.warning(f"Gemini Key #{self.index} exhausted. Marked unavailable for {cooldown_minutes} min.")
 
 class GeminiPool:
     def __init__(self):
@@ -55,15 +57,14 @@ class GeminiPool:
             if not self.keys:
                 return None
 
-            start_idx = self._current_idx
+            # Always check all keys
             for _ in range(len(self.keys)):
                 k = self.keys[self._current_idx]
                 if k.is_active:
-                    # Move to next key for next time to distribute load, or stay?
-                    # Let's keep using it until it fails or we want round-robin.
-                    # Round-robin is better to avoid exhausting one key fast.
+                    # Found an active key. Return it and increment index for next time (round-robin)
                     self._current_idx = (self._current_idx + 1) % len(self.keys)
                     return k
+                # If exhausted, immediately try next key
                 self._current_idx = (self._current_idx + 1) % len(self.keys)
 
             return None # All keys exhausted/in cooldown

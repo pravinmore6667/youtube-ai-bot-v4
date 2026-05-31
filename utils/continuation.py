@@ -267,7 +267,7 @@ def _merge_text(first: str, second: str) -> str:
 
 from typing import Any, Callable
 
-def generate_with_continuation(
+async def generate_with_continuation(
     prompt: str,
     call_fn: Callable[[str], Any],
     parse_fn: Callable[[str], Any] = None,
@@ -287,6 +287,8 @@ def generate_with_continuation(
     accumulated = None
     last_raw    = ""
 
+    import asyncio
+
     for attempt in range(max_attempts):
         if attempt == 0:
             current_prompt = prompt
@@ -300,6 +302,13 @@ def generate_with_continuation(
                 prompt, cutoff, expected_format)
 
         raw = call_fn(current_prompt)
+
+        if asyncio.iscoroutine(raw):
+            raw = await raw
+
+        if not isinstance(raw, str):
+            raise TypeError(f"Expected string, got {type(raw).__name__}")
+
         last_raw = raw
 
         try:

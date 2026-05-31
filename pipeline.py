@@ -114,7 +114,12 @@ def run(manual_topic: str = None) -> dict:
         # ── 2. UNIFIED AGENT — 1 call = script + SEO + thumbnail meta ──
         if not unified:
             log.info("🤖 UnifiedAgent: generating script + SEO in ONE call...")
-            unified = _step(job_id, "UnifiedAgent", unified_generate, topic, job_id)
+            # unified_generate is now an async function
+            import asyncio
+            def _run_unified_generate(*args, **kwargs):
+                return asyncio.run(unified_generate(*args, **kwargs))
+
+            unified = _step(job_id, "UnifiedAgent", _run_unified_generate, topic, job_id)
             save_checkpoint("unified", unified)
 
         script = {

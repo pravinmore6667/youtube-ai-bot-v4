@@ -151,7 +151,7 @@ CRITICAL: full_narration must be the complete, ready-to-speak script.
 No placeholders. No [brackets]. Real content only."""
 
 
-def generate(topic: dict, job_id: str = "") -> dict:
+async def generate(topic: dict, job_id: str = "") -> dict:
     """
     Main entry point. Returns complete video content dict.
     Cache-first → AI generation → library storage.
@@ -190,10 +190,10 @@ def generate(topic: dict, job_id: str = "") -> dict:
 
     log.info("🤖 Calling AI (single unified call)...")
 
-    def _call(p: str) -> str:
-        return ask(p, max_tokens=4096)
+    def _call(p: str):
+        return ask(p, max_tokens=4096) # will return coroutine
 
-    result = generate_with_continuation(
+    result = await generate_with_continuation(
         prompt=prompt,
         call_fn=_call,
         parse_fn=lambda raw: _parse_result(raw, topic, niche, lang),

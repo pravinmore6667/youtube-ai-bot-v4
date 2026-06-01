@@ -210,6 +210,26 @@ def build_video(audio_path: str, script: dict, job_id: str) -> str:
 
                 try:
                     if clip_path and os.path.exists(clip_path):
+                        log.info(f"Video path: {clip_path}")
+                        log.info(f"Video size: {os.path.getsize(clip_path)} bytes")
+
+                        import subprocess
+                        probe = subprocess.run(
+                            [
+                                "ffprobe",
+                                "-v", "error",
+                                "-show_entries",
+                                "format=duration",
+                                "-of", "default=noprint_wrappers=1:nokey=1",
+                                clip_path
+                            ],
+                            capture_output=True,
+                            text=True
+                        )
+
+                        if os.path.getsize(clip_path) < 100000 or probe.returncode != 0:
+                            raise ValueError(f"Invalid video: {clip_path}")
+
                         vc = VideoFileClip(clip_path, audio=False)
                         vc = vc.resize((W, H))
                         # Loop or trim to segment duration

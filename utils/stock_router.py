@@ -66,6 +66,27 @@ def _pexels_search(query: str, n: int = 5) -> list[str]:
         log.warning(f"Pexels search failed for '{query}': {e}")
         raise
 
+def validate_video(path: str) -> bool:
+    import subprocess
+    if not os.path.exists(path):
+        return False
+    size = os.path.getsize(path)
+    if size < 100000:
+        return False
+    probe = subprocess.run(
+        [
+            "ffprobe",
+            "-v", "error",
+            "-show_entries",
+            "format=duration",
+            "-of", "default=noprint_wrappers=1:nokey=1",
+            path
+        ],
+        capture_output=True,
+        text=True
+    )
+    return probe.returncode == 0
+
 def get_stock_video(query: str, dest: str, n: int = 5) -> str | None:
     """
     Intelligently routes to stock video providers.
@@ -86,9 +107,13 @@ def get_stock_video(query: str, dest: str, n: int = 5) -> str | None:
 
             for url in urls:
                 path = _download_clip(url, dest)
-                if path:
+                if path and validate_video(path):
                     record_success("pixabay")
                     return path
+                elif path:
+                    log.warning(f"Downloaded video failed validation: {path}")
+                    try: os.remove(path)
+                    except: pass
         except Exception:
             record_failure("pixabay")
             log.info("[Stock Router] Pixabay failed, Switching to Pexels")
@@ -107,10 +132,14 @@ def get_stock_video(query: str, dest: str, n: int = 5) -> str | None:
 
             for url in urls:
                 path = _download_clip(url, dest)
-                if path:
+                if path and validate_video(path):
                     record_success("pexels")
                     log.info("[Stock Router] Pexels success")
                     return path
+                elif path:
+                    log.warning(f"Downloaded video failed validation: {path}")
+                    try: os.remove(path)
+                    except: pass
         except Exception:
             record_failure("pexels")
             log.warning("[Stock Router] Pexels failed")
@@ -118,13 +147,22 @@ def get_stock_video(query: str, dest: str, n: int = 5) -> str | None:
     return None
 
 def _download_clip(url: str, dest: str) -> str | None:
-    try:
-        r = requests.get(url, stream=True, timeout=60)
-        r.raise_for_status()
-        path = os.path.join(dest, f"{uuid.uuid4().hex}.mp4")
-        with open(path, "wb") as f:
-            for chunk in r.iter_content(8192): f.write(chunk)
-        return path
-    except Exception as e:
-        log.warning(f"Download failed: {e}")
-        return None
+    for attempt in range(3):
+        try:
+            r = requests.get(url, stream=True, timeout=60)
+            r.raise_for_status()
+            path = os.path.join(dest, f"{uuid.uuid4().hex}.mp4")
+            with open(path, "wb") as f:
+                for chunk in r.iter_content(8192): f.write(chunk)
+
+            # Additional check inside download clip
+            if validate_video(path):
+                return path
+            else:
+                log.warning(f"Corrupt video downloaded (attempt {attempt+1}): {path}")
+                try: os.remove(path)
+                except: pass
+                continue # Retry
+        except Exception as e:
+            log.warning(f"Download failed (attempt {attempt+1}): {e}")
+    return None

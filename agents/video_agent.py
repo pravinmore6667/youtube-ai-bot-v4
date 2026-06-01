@@ -2,23 +2,9 @@
 agents/video_agent.py
 ──────────────────────
 Professional video assembly — maximum retention editing.
-
-Features (all FREE):
-  • Stock footage: Pexels + Pixabay (parallel fetching)
-  • Ken Burns zoom/pan effects every clip (prevents static boredom)
-  • Hard cuts every 3-5 seconds within clips
-  • Smooth fade transitions between sections
-  • Section title cards with animation
-  • Progress bar (top of screen)
-  • Background music at 12% volume (from Pixabay music)
-  • Royalty-free SFX for transitions (whoosh)
-  • Lower-third text overlays
-  • Cinematic colour grade (contrast + saturation boost)
-  • Auto-loops short clips, trims long clips
-  • Renders 1080p H.264 via FFmpeg
 """
 
-import os, uuid, requests, tempfile, subprocess, math
+import os, uuid, requests, tempfile, subprocess, math, shutil, time, gc
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 import numpy as np
@@ -40,7 +26,6 @@ W, H = config.VIDEO_WIDTH, config.VIDEO_HEIGHT
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
 def _fetch_music(mood: str = "ambient background") -> str | None:
-    """Download a free background music track from Pixabay."""
     if not config.ENABLE_MUSIC:
         return None
     os.makedirs(config.OUTPUT_MUSIC, exist_ok=True)
@@ -71,13 +56,35 @@ def _get_clip_for_query(query: str, dest: str) -> str | None:
     path = get_stock_video(query, dest, 4)
     if path: return path
 
-    # fallback: generic niche search
     path = get_stock_video(config.CHANNEL_NICHE, dest, 3)
     if path: return path
 
     path = get_stock_video("abstract background", dest, 2)
     return path
 
+
+
+def safe_close(obj):
+    try:
+        if obj and hasattr(obj, 'close'):
+            obj.close()
+    except Exception:
+        pass
+
+def get_resample_filter():
+    import PIL
+    try:
+        return PIL.Image.Resampling.LANCZOS
+    except AttributeError:
+        return PIL.Image.LANCZOS
+
+
+def safe_close(obj):
+    try:
+        if obj and hasattr(obj, 'close'):
+            obj.close()
+    except Exception:
+        pass
 
 def get_resample_filter():
     import PIL
@@ -88,8 +95,21 @@ def get_resample_filter():
 
 # ── Video effects ─────────────────────────────────────────────
 
+def safe_close(obj):
+    try:
+        if obj and hasattr(obj, 'close'):
+            obj.close()
+    except Exception:
+        pass
+
+def get_resample_filter():
+    import PIL
+    try:
+        return PIL.Image.Resampling.LANCZOS
+    except AttributeError:
+        return PIL.Image.LANCZOS
+
 def _ken_burns(clip, zoom_direction: str = "in", zoom_amount: float = 1.08):
-    """Apply Ken Burns zoom/pan effect for visual interest."""
     try:
         if not config.ENABLE_ZOOM_EFFECTS:
             return clip
@@ -107,13 +127,10 @@ def _ken_burns(clip, zoom_direction: str = "in", zoom_amount: float = 1.08):
 
 
 def _color_grade(clip):
-    """Cinematic colour grade: boost contrast + saturation."""
     try:
         def grade(frame):
             arr  = frame.astype(np.float32)
-            # Contrast boost (midtone)
             arr  = np.clip((arr - 128) * 1.15 + 128, 0, 255)
-            # Slight saturation boost via luminance
             grey = 0.299*arr[:,:,0] + 0.587*arr[:,:,1] + 0.114*arr[:,:,2]
             grey = grey[:,:,np.newaxis]
             arr  = np.clip(grey + (arr - grey) * 1.20, 0, 255)
@@ -124,7 +141,6 @@ def _color_grade(clip):
 
 
 def _section_title_card(heading: str, duration: float) -> TextClip | None:
-    """Animated section title shown for first 2.5s of each section."""
     try:
         tc = (TextClip(heading.upper(), fontsize=54, font="DejaVu-Sans-Bold",
                        color="#FFD700", stroke_color="black", stroke_width=2,
@@ -144,7 +160,6 @@ def _progress_bar(progress: float, duration: float) -> ColorClip:
 
 
 def _lower_third(text: str, duration: float) -> TextClip | None:
-    """Subtle lower-third label."""
     try:
         bg  = (ColorClip((500, 50), color=(0, 0, 0))
                .set_opacity(0.55).set_duration(min(3.0, duration))
@@ -172,7 +187,6 @@ def build_video(audio_path: str, script: dict, job_id: str) -> str:
 
     log.info(f"🎬 Building {total_dur:.1f}s video — {n_sections} sections")
 
-    # Fetch background music in background
     import concurrent.futures
     with concurrent.futures.ThreadPoolExecutor(max_workers=2) as ex:
         niche_mood = {"technology":"cinematic electronic","finance":"corporate background",
@@ -181,8 +195,8 @@ def build_video(audio_path: str, script: dict, job_id: str) -> str:
                       "documentary":"documentary background"}.get(config.CHANNEL_NICHE, "ambient background")
         music_future = ex.submit(_fetch_music, niche_mood)
 
-        with tempfile.TemporaryDirectory() as tmp:
-            # Fetch all footage clips in parallel
+        tmp = tempfile.mkdtemp()
+        try:
             import concurrent.futures as cf2
             clip_futures = {}
             with cf2.ThreadPoolExecutor(max_workers=4) as clip_ex:
@@ -199,7 +213,6 @@ def build_video(audio_path: str, script: dict, job_id: str) -> str:
                     log.warning(f"Clip {idx} failed: {e}")
                     clip_paths[idx] = None
 
-            # Assemble video clips
             video_clips = []
             zoom_dirs   = ["in", "out", "in", "out", "in"]
 
@@ -213,18 +226,9 @@ def build_video(audio_path: str, script: dict, job_id: str) -> str:
                         log.info(f"Video path: {clip_path}")
                         log.info(f"Video size: {os.path.getsize(clip_path)} bytes")
 
-                        import subprocess
                         probe = subprocess.run(
-                            [
-                                "ffprobe",
-                                "-v", "error",
-                                "-show_entries",
-                                "format=duration",
-                                "-of", "default=noprint_wrappers=1:nokey=1",
-                                clip_path
-                            ],
-                            capture_output=True,
-                            text=True
+                            ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", clip_path],
+                            capture_output=True, text=True
                         )
 
                         if os.path.getsize(clip_path) < 100000 or probe.returncode != 0:
@@ -232,7 +236,6 @@ def build_video(audio_path: str, script: dict, job_id: str) -> str:
 
                         vc = VideoFileClip(clip_path, audio=False)
                         vc = vc.resize((W, H))
-                        # Loop or trim to segment duration
                         if vc.duration < seg_dur:
                             reps = math.ceil(seg_dur / vc.duration)
                             vc   = concatenate_videoclips([vc] * reps)
@@ -240,14 +243,11 @@ def build_video(audio_path: str, script: dict, job_id: str) -> str:
                         vc = _ken_burns(vc, zoom_dir)
                         vc = _color_grade(vc)
                     else:
-                        # Dark gradient fallback
                         vc = ColorClip((W, H), color=(8, 12, 28), duration=seg_dur)
 
-                    # Fade transitions
                     vc = fadein(vc, 0.5)
                     vc = fadeout(vc, 0.5)
 
-                    # Overlays
                     overlays = [vc]
 
                     title_card = _section_title_card(section.get("heading",""), seg_dur)
@@ -263,9 +263,7 @@ def build_video(audio_path: str, script: dict, job_id: str) -> str:
                     video_clips.append(vc)
 
                 except Exception as e:
-                    log.warning(
-                        f"Section rendering failed: {e}"
-                    )
+                    log.warning(f"Section rendering failed: {e}")
 
                     def create_fallback_slide():
                         return ColorClip((W, H), color=(10, 14, 30), duration=seg_dur)
@@ -273,7 +271,6 @@ def build_video(audio_path: str, script: dict, job_id: str) -> str:
                     fb = create_fallback_slide()
                     video_clips.append(fb)
 
-            # Concatenate all sections
             if video_clips:
                 video = concatenate_videoclips(video_clips, method="compose")
                 if video.duration > total_dur:
@@ -284,58 +281,68 @@ def build_video(audio_path: str, script: dict, job_id: str) -> str:
             else:
                 video = ColorClip((W, H), color=(0,0,0), duration=total_dur)
 
-        # ── Mix audio ─────────────────────────────────────────
-        try:
-            music_path = music_future.result()
-        except Exception as e:
-            log.warning(f"Failed to fetch background music: {e}")
-            music_path = None
-        if music_path and os.path.exists(music_path) and config.ENABLE_MUSIC:
             try:
-                voice_audio  = AudioSegment.from_mp3(audio_path)
-                music_audio  = AudioSegment.from_mp3(music_path)
-                # Loop music to match video length
-                while len(music_audio) < len(voice_audio):
-                    music_audio += music_audio
-                music_audio  = music_audio[:len(voice_audio)]
-                # Fade in/out music
-                music_audio  = music_audio.fade_in(3000).fade_out(5000)
-                # Duck music to 12% volume
-                duck_db      = 20 * math.log10(config.MUSIC_VOLUME)
-                music_audio  = music_audio + duck_db
-                mixed        = voice_audio.overlay(music_audio)
-                mixed_path   = audio_path.replace(".mp3", "_mixed.mp3")
-                mixed.export(mixed_path, format="mp3", bitrate="192k")
-                final_audio  = AudioFileClip(mixed_path)
-                log.info("  Background music mixed in")
+                music_path = music_future.result()
             except Exception as e:
-                log.warning(f"  Music mix failed: {e} — using voice only")
+                log.warning(f"Failed to fetch background music: {e}")
+                music_path = None
+
+            if music_path and os.path.exists(music_path) and config.ENABLE_MUSIC:
+                try:
+                    voice_audio  = AudioSegment.from_mp3(audio_path)
+                    music_audio  = AudioSegment.from_mp3(music_path)
+                    while len(music_audio) < len(voice_audio):
+                        music_audio += music_audio
+                    music_audio  = music_audio[:len(voice_audio)]
+                    music_audio  = music_audio.fade_in(3000).fade_out(5000)
+                    duck_db      = 20 * math.log10(config.MUSIC_VOLUME)
+                    music_audio  = music_audio + duck_db
+                    mixed        = voice_audio.overlay(music_audio)
+                    mixed_path   = audio_path.replace(".mp3", "_mixed.mp3")
+                    mixed.export(mixed_path, format="mp3", bitrate="192k")
+                    final_audio  = AudioFileClip(mixed_path)
+                    log.info("  Background music mixed in")
+                except Exception as e:
+                    log.warning(f"  Music mix failed: {e} — using voice only")
+                    final_audio = AudioFileClip(audio_path)
+            else:
                 final_audio = AudioFileClip(audio_path)
-        else:
-            final_audio = AudioFileClip(audio_path)
 
-        final = video.set_audio(final_audio)
-        log.info(f"🖥️  Rendering to {output_path}...")
-        final.write_videofile(output_path, fps=config.VIDEO_FPS,
-                              codec="libx264", audio_codec="aac",
-                              threads=4, preset="fast", logger=None)
+            final = video.set_audio(final_audio)
+            log.info(f"🖥️  Rendering to {output_path}...")
+            final.write_videofile(output_path, fps=config.VIDEO_FPS,
+                                  codec="libx264", audio_codec="aac",
+                                  threads=4, preset="fast", logger=None)
 
-    log.success(f"Video built: {output_path}")
-    if 'final' in locals() and hasattr(final, 'close'):
-        try: final.close()
-        except Exception: pass
-    if 'final_audio' in locals() and hasattr(final_audio, 'close'):
-        try: final_audio.close()
-        except Exception: pass
-    if 'video' in locals() and hasattr(video, 'close'):
-        try: video.close()
-        except Exception: pass
-    if 'audio' in locals() and hasattr(audio, 'close'):
-        try: audio.close()
-        except Exception: pass
-    if 'video_clips' in locals():
-        for clip in video_clips:
-            if hasattr(clip, 'close'):
-                try: clip.close()
-                except Exception: pass
+            log.success(f"Video built: {output_path}")
+
+        except Exception as e:
+            log.warning(f"Video rendering failed: {e}")
+            raise e
+        except Exception as e:
+            log.warning(f"Video rendering failed: {e}")
+            raise e
+        finally:
+            log.info("Closing video clips")
+            log.info("Closing audio clips")
+            log.info("Running garbage collection")
+
+            if 'final' in locals(): safe_close(final)
+            if 'final_audio' in locals(): safe_close(final_audio)
+            if 'video' in locals(): safe_close(video)
+            if 'audio' in locals(): safe_close(audio)
+
+            if 'video_clips' in locals():
+                for c in video_clips: safe_close(c)
+
+            gc.collect()
+
+            for _ in range(10):
+                try:
+                    shutil.rmtree(tmp)
+                    break
+                except PermissionError:
+                    gc.collect()
+                    time.sleep(1)
+
     return output_path

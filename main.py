@@ -21,6 +21,13 @@ FREE-ONLY ARCHITECTURE:
 """
 
 import sys, os
+
+# Apply PIL patch before anything else that might import moviepy/PIL
+import PIL
+import PIL.Image
+if not hasattr(PIL.Image, 'ANTIALIAS'):
+    PIL.Image.ANTIALIAS = getattr(PIL.Image, 'Resampling', PIL.Image).LANCZOS
+
 from colorama import Fore, Style, init
 init()
 
@@ -29,6 +36,7 @@ from database import db
 from utils.logger import get_logger
 
 log = get_logger("Main")
+log.info(f"Pillow version: {PIL.__version__}")
 
 
 def banner():
@@ -93,8 +101,8 @@ def _startup_self_test() -> dict:
     # ── 1. Import Validation ─────────────────────────────────
     critical_imports = [
         ("config",                      "config"),
-        ("database.db",                 "database"),
-        ("utils.logger",                "utils.logger"),
+        ("database.db",                 "init_db"),
+        ("utils.logger",                "get_logger"),
         ("agents.strategy_agent",       "pick_todays_topic"),
         ("agents.unified_agent",        "generate"),
         ("agents.voice_agent",          "generate_voice"),

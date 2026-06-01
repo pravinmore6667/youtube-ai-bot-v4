@@ -41,6 +41,13 @@ EMOTION_BADGES = {
 }
 
 
+def get_resample_filter():
+    try:
+        return Image.Resampling.LANCZOS
+    except AttributeError:
+        return Image.LANCZOS
+
+
 def _fetch_image(prompt: str, seed: int = 42) -> Image.Image | None:
     try:
         encoded = urllib.parse.quote(prompt)
@@ -49,7 +56,7 @@ def _fetch_image(prompt: str, seed: int = 42) -> Image.Image | None:
         r = requests.get(url, timeout=90)
         r.raise_for_status()
         img = Image.open(io.BytesIO(r.content)).convert("RGB")
-        img = img.resize((1280, 720), Image.LANCZOS)
+        img = img.resize((1280, 720), get_resample_filter())
         return img
     except Exception as e:
         log.warning(f"  Pollinations failed: {e}")

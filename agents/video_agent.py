@@ -79,6 +79,13 @@ def _get_clip_for_query(query: str, dest: str) -> str | None:
     return path
 
 
+def get_resample_filter():
+    import PIL
+    try:
+        return PIL.Image.Resampling.LANCZOS
+    except AttributeError:
+        return PIL.Image.LANCZOS
+
 # ── Video effects ─────────────────────────────────────────────
 
 def _ken_burns(clip, zoom_direction: str = "in", zoom_amount: float = 1.08):
@@ -236,8 +243,14 @@ def build_video(audio_path: str, script: dict, job_id: str) -> str:
                     video_clips.append(vc)
 
                 except Exception as e:
-                    log.warning(f"Section {i} failed: {e} — fallback")
-                    fb = ColorClip((W, H), color=(10, 14, 30), duration=seg_dur)
+                    log.warning(
+                        f"Section rendering failed: {e}"
+                    )
+
+                    def create_fallback_slide():
+                        return ColorClip((W, H), color=(10, 14, 30), duration=seg_dur)
+
+                    fb = create_fallback_slide()
                     video_clips.append(fb)
 
             # Concatenate all sections

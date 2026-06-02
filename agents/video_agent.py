@@ -52,64 +52,22 @@ def _fetch_music(mood: str = "ambient background") -> str | None:
 
 def _get_clip_for_query(query: str, dest: str) -> str | None:
     from utils.stock_router import get_stock_video
+    import time
 
+    start_time = time.time()
     path = get_stock_video(query, dest, 4)
-    if path: return path
+    if not path:
+        path = get_stock_video(config.CHANNEL_NICHE, dest, 3)
+    if not path:
+        path = get_stock_video("abstract background", dest, 2)
 
-    path = get_stock_video(config.CHANNEL_NICHE, dest, 3)
-    if path: return path
-
-    path = get_stock_video("abstract background", dest, 2)
+    elapsed = time.time() - start_time
+    log.info(f"Footage download duration for '{query}': {elapsed:.1f}s")
     return path
 
 
 
-def safe_close(obj):
-    try:
-        if obj and hasattr(obj, 'close'):
-            obj.close()
-    except Exception:
-        pass
 
-def get_resample_filter():
-    import PIL
-    try:
-        return PIL.Image.Resampling.LANCZOS
-    except AttributeError:
-        return PIL.Image.LANCZOS
-
-
-def safe_close(obj):
-    try:
-        if obj and hasattr(obj, 'close'):
-            obj.close()
-    except Exception:
-        pass
-
-def get_resample_filter():
-    import PIL
-    try:
-        return PIL.Image.Resampling.LANCZOS
-    except AttributeError:
-        return PIL.Image.LANCZOS
-
-# ── Video effects ─────────────────────────────────────────────
-
-def safe_close(obj):
-    try:
-        if obj and hasattr(obj, 'close'):
-            obj.close()
-    except Exception:
-        pass
-
-def get_resample_filter():
-    import PIL
-    try:
-        return PIL.Image.Resampling.LANCZOS
-    except AttributeError:
-        return PIL.Image.LANCZOS
-
-def _ken_burns(clip, zoom_direction: str = "in", zoom_amount: float = 1.08):
     try:
         if not config.ENABLE_ZOOM_EFFECTS:
             return clip
@@ -287,26 +245,53 @@ def build_video(audio_path: str, script: dict, job_id: str) -> str:
                 log.warning(f"Failed to fetch background music: {e}")
                 music_path = None
 
+            final_audio = AudioFileClip(audio_path)
+
             if music_path and os.path.exists(music_path) and config.ENABLE_MUSIC:
                 try:
+                    music_size = os.path.getsize(music_path)
+                    log.info(f"Music path: {music_path}, size: {music_size} bytes")
+
+                    if music_size < 1000:
+                        log.warning("Music file is too small, likely invalid. Proceeding without music.")
+                        raise ValueError("Invalid music file size")
+
                     voice_audio  = AudioSegment.from_mp3(audio_path)
                     music_audio  = AudioSegment.from_mp3(music_path)
-                    while len(music_audio) < len(voice_audio):
-                        music_audio += music_audio
+
+                    music_duration_s = len(music_audio) / 1000.0
+                    voice_duration_s = len(voice_audio) / 1000.0
+                    log.info(f"Music duration: {music_duration_s:.1f}s, Voice duration: {voice_duration_s:.1f}s")
+
+                    # If music is very short and would loop hundreds of times, might cause issues
+                    if len(music_audio) == 0:
+                        raise ValueError("Music audio has 0 duration.")
+
+                    if len(music_audio) < len(voice_audio):
+                        # Calculate needed loops to avoid massive concatenation loops and list index out of range internally
+                        loops_needed = math.ceil(len(voice_audio) / len(music_audio))
+                        music_audio = music_audio * loops_needed
+
                     music_audio  = music_audio[:len(voice_audio)]
                     music_audio  = music_audio.fade_in(3000).fade_out(5000)
-                    duck_db      = 20 * math.log10(config.MUSIC_VOLUME)
+
+                    # Ensure background music volume is 15-20%. Let's default to 0.15.
+                    music_volume = config.MUSIC_VOLUME if config.MUSIC_VOLUME <= 0.20 else 0.15
+                    duck_db      = 20 * math.log10(music_volume)
                     music_audio  = music_audio + duck_db
+
                     mixed        = voice_audio.overlay(music_audio)
                     mixed_path   = audio_path.replace(".mp3", "_mixed.mp3")
                     mixed.export(mixed_path, format="mp3", bitrate="192k")
+
+                    # Close the original before replacing it to avoid locking
+                    if final_audio and hasattr(final_audio, "close"): final_audio.close()
                     final_audio  = AudioFileClip(mixed_path)
-                    log.info("  Background music mixed in")
+                    log.info(f"  Background music mixed in at {int(music_volume * 100)}% volume")
                 except Exception as e:
                     log.warning(f"  Music mix failed: {e} — using voice only")
-                    final_audio = AudioFileClip(audio_path)
             else:
-                final_audio = AudioFileClip(audio_path)
+                log.warning("No music available or ENABLE_MUSIC is false.")
 
             final = video.set_audio(final_audio)
             log.info(f"🖥️  Rendering to {output_path}...")
@@ -327,13 +312,14 @@ def build_video(audio_path: str, script: dict, job_id: str) -> str:
             log.info("Closing audio clips")
             log.info("Running garbage collection")
 
-            if 'final' in locals(): safe_close(final)
-            if 'final_audio' in locals(): safe_close(final_audio)
-            if 'video' in locals(): safe_close(video)
-            if 'audio' in locals(): safe_close(audio)
+            if 'final' in locals() and final and hasattr(final, "close"): final.close()
+            if 'final_audio' in locals() and final_audio and hasattr(final_audio, "close"): final_audio.close()
+            if 'video' in locals() and video and hasattr(video, "close"): video.close()
+            if 'audio' in locals() and audio and hasattr(audio, "close"): audio.close()
 
             if 'video_clips' in locals():
-                for c in video_clips: safe_close(c)
+                for c in video_clips:
+                    if c and hasattr(c, "close"): c.close()
 
             gc.collect()
 

@@ -175,14 +175,9 @@ def run(manual_topic: str = None) -> dict:
         # ── 4. PARALLEL: Video + Captions + Thumbnail ─────────
         log.info("⚡ Parallel: Video | Captions | Thumbnail")
 
-        import time
-        import psutil
-
         def _do_video():
             if video_path: return video_path
-            start_render = time.time()
             v = _step(job_id, "VideoAgent", build_video, audio_path, script, job_id)
-            job["render_duration"] = time.time() - start_render
             save_checkpoint("video_render", {"video_path": v})
             return v
 
@@ -229,9 +224,7 @@ def run(manual_topic: str = None) -> dict:
         }
 
         # ── 6. Upload ─────────────────────────────────────────
-        start_upload = time.time()
         upload_result = _step(job_id, "UploadAgent", upload_video, video_path, thumb_path, upload_data)
-        job["upload_duration"] = time.time() - start_upload
 
         if upload_result and "video_id" in upload_result:
             upload_id = upload_result["video_id"]
@@ -303,20 +296,6 @@ def run(manual_topic: str = None) -> dict:
         })
         job_complete(job_id)
         clear_job()
-
-        # End of job summary
-        mem_mb = psutil.Process().memory_info().rss / (1024 * 1024)
-        log.info("━" * 56)
-        log.info(f"  🏁 END OF JOB SUMMARY [{job_id}]")
-        log.info(f"  Topic: {seo['title']}")
-        log.info(f"  Script words: {script['word_count']}")
-        log.info(f"  Video duration: ~{script['estimated_duration_min']} mins")
-        log.info(f"  Render time: {job.get('render_duration', 0):.1f}s")
-        log.info(f"  Upload time: {job.get('upload_duration', 0):.1f}s")
-        log.info(f"  Memory usage: {mem_mb:.1f} MB")
-        log.info(f"  Thumbnail: {thumb_path}")
-        log.info(f"  Published URL: {upload_result['url']}")
-        log.info("━" * 56)
 
         # Try to cleanup files
         for p in [audio_path, video_path]:

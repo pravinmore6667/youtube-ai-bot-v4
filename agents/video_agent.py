@@ -52,17 +52,14 @@ def _fetch_music(mood: str = "ambient background") -> str | None:
 
 def _get_clip_for_query(query: str, dest: str) -> str | None:
     from utils.stock_router import get_stock_video
-    import time
 
-    start_time = time.time()
     path = get_stock_video(query, dest, 4)
-    if not path:
-        path = get_stock_video(config.CHANNEL_NICHE, dest, 3)
-    if not path:
-        path = get_stock_video("abstract background", dest, 2)
+    if path: return path
 
-    elapsed = time.time() - start_time
-    log.info(f"Footage download duration for '{query}': {elapsed:.1f}s")
+    path = get_stock_video(config.CHANNEL_NICHE, dest, 3)
+    if path: return path
+
+    path = get_stock_video("abstract background", dest, 2)
     return path
 
 
@@ -245,53 +242,26 @@ def build_video(audio_path: str, script: dict, job_id: str) -> str:
                 log.warning(f"Failed to fetch background music: {e}")
                 music_path = None
 
-            final_audio = AudioFileClip(audio_path)
-
             if music_path and os.path.exists(music_path) and config.ENABLE_MUSIC:
                 try:
-                    music_size = os.path.getsize(music_path)
-                    log.info(f"Music path: {music_path}, size: {music_size} bytes")
-
-                    if music_size < 1000:
-                        log.warning("Music file is too small, likely invalid. Proceeding without music.")
-                        raise ValueError("Invalid music file size")
-
                     voice_audio  = AudioSegment.from_mp3(audio_path)
                     music_audio  = AudioSegment.from_mp3(music_path)
-
-                    music_duration_s = len(music_audio) / 1000.0
-                    voice_duration_s = len(voice_audio) / 1000.0
-                    log.info(f"Music duration: {music_duration_s:.1f}s, Voice duration: {voice_duration_s:.1f}s")
-
-                    # If music is very short and would loop hundreds of times, might cause issues
-                    if len(music_audio) == 0:
-                        raise ValueError("Music audio has 0 duration.")
-
-                    if len(music_audio) < len(voice_audio):
-                        # Calculate needed loops to avoid massive concatenation loops and list index out of range internally
-                        loops_needed = math.ceil(len(voice_audio) / len(music_audio))
-                        music_audio = music_audio * loops_needed
-
+                    while len(music_audio) < len(voice_audio):
+                        music_audio += music_audio
                     music_audio  = music_audio[:len(voice_audio)]
                     music_audio  = music_audio.fade_in(3000).fade_out(5000)
-
-                    # Ensure background music volume is 15-20%. Let's default to 0.15.
-                    music_volume = config.MUSIC_VOLUME if config.MUSIC_VOLUME <= 0.20 else 0.15
-                    duck_db      = 20 * math.log10(music_volume)
+                    duck_db      = 20 * math.log10(config.MUSIC_VOLUME)
                     music_audio  = music_audio + duck_db
-
                     mixed        = voice_audio.overlay(music_audio)
                     mixed_path   = audio_path.replace(".mp3", "_mixed.mp3")
                     mixed.export(mixed_path, format="mp3", bitrate="192k")
-
-                    # Close the original before replacing it to avoid locking
-                    if final_audio and hasattr(final_audio, "close"): final_audio.close()
                     final_audio  = AudioFileClip(mixed_path)
-                    log.info(f"  Background music mixed in at {int(music_volume * 100)}% volume")
+                    log.info("  Background music mixed in")
                 except Exception as e:
                     log.warning(f"  Music mix failed: {e} — using voice only")
+                    final_audio = AudioFileClip(audio_path)
             else:
-                log.warning("No music available or ENABLE_MUSIC is false.")
+                final_audio = AudioFileClip(audio_path)
 
             final = video.set_audio(final_audio)
             log.info(f"🖥️  Rendering to {output_path}...")

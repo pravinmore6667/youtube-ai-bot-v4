@@ -15,7 +15,7 @@ python main.py --cache-stats             → Show cache statistics
 python main.py --library                 → Show content library stats
 
 FREE-ONLY ARCHITECTURE:
-  Approved: GEMINI, GROQ, CEREBRAS, OPENROUTER, POLLINATIONS, AI_HORDE
+  Approved: GEMINI, GROQ, CEREBRAS, OPENROUTER, POLLINATIONS, PUTER, AI_HORDE
   Optional: NVIDIA (free tier)
   Blocked:  TOGETHER, DEEPINFRA, SAMBANOVA, GROK
 """
@@ -59,6 +59,8 @@ def banner():
         providers.append("NVIDIA")
     if config.POLLINATIONS_ENABLED:
         providers.append("Pollinations")
+    if config.PUTER_ENABLED:
+        providers.append("Puter")
     if config.AI_HORDE_ENABLED:
         providers.append("AI-Horde")
     prov_str = " → ".join(providers) if providers else "⚠ No providers configured!"
@@ -156,6 +158,9 @@ def _startup_self_test() -> dict:
     if C.POLLINATIONS_ENABLED:
         free_providers_found.append("Pollinations")
         passed.append("PROVIDER: Pollinations enabled (always-free)")
+    if C.PUTER_ENABLED:
+        free_providers_found.append("Puter")
+        passed.append("PROVIDER: Puter enabled (always-free)")
     if C.AI_HORDE_ENABLED:
         free_providers_found.append("AI-Horde")
         passed.append("PROVIDER: AI-Horde enabled (always-free)")
@@ -255,13 +260,14 @@ def main():
         Config.GROK_API_KEY and not Config.GROK_API_KEY.startswith("your_"),
         Config.NVIDIA_API_KEY and not Config.NVIDIA_API_KEY.startswith("your_"),
         Config.POLLINATIONS_ENABLED,
+        Config.PUTER_ENABLED,
         Config.AI_HORDE_ENABLED,
     ])
     if not has_free:
         print(f"\n{Fore.RED}❌ CRITICAL STARTUP ERROR: No approved free AI providers configured.\n"
               f"   Please set at least one of: GROQ_API_KEY, GEMINI_API_KEY, MISTRAL_API_KEY,\n"
               f"   GROK_API_KEY, NVIDIA_API_KEY — or enable free fallbacks:\n"
-              f"   POLLINATIONS_ENABLED=true, AI_HORDE_ENABLED=true{Style.RESET_ALL}\n")
+              f"   POLLINATIONS_ENABLED=true, PUTER_ENABLED=true, AI_HORDE_ENABLED=true{Style.RESET_ALL}\n")
         sys.exit(1)
 
     db.init_db()

@@ -76,9 +76,7 @@ async def ask(prompt: str, is_fast: bool = False, max_tokens: int = 4096) -> str
                 log.warning(f"[{provider_name}] Model={getattr(provider, 'current_model', 'unknown')} Latency={time.time() - t0:.2f}s Status=Error Error=\"{err_str[:60]}\"")
 
                 if is_rl:
-                    # Rate limit hit, skip second attempt for this provider
-                    log.warning(f"Rate limit exceeded on {provider_name}. Immediately falling back to next provider.")
-                    # If Gemini fails and Groq is available, we ensure we fallback immediately.
+                    # Rate limit hit, skip second attempt for this provider and move to next
                     break
 
     raise RuntimeError(f"All AI providers failed. Last error: {last_err}")

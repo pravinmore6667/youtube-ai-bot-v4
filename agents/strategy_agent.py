@@ -155,10 +155,10 @@ def _youtube_trending(profile: dict) -> list[str]:
 
 # ─── 6. Gemini Web Insight ───────────────────────────────────
 
-def _gemini_insight(profile: dict) -> list[str]:
+async def _gemini_insight(profile: dict) -> list[str]:
     try:
         lang_note = "Focus on India/Hindi market trends." if config.CHANNEL_LANGUAGE == "hi" else ""
-        result = ask_json(
+        result = await ask_json(
             f"""What topics in the "{profile['label']}" category are going viral on YouTube
 right now in the past 2 weeks? Include both evergreen AND trending.
 {lang_note}
@@ -174,24 +174,31 @@ Return JSON: {{"topics": ["topic1","topic2","topic3","topic4","topic5","topic6",
 
 # ─── Main topic picker ────────────────────────────────────────
 
-def pick_todays_topic(niche_id: str = None) -> dict:
+async def pick_todays_topic(niche_id: str = None) -> dict:
     niche_id = niche_id or config.CHANNEL_NICHE
     profile  = get_profile(niche_id)
     log.info(f"🔍 Researching: {profile['label']} | lang: {config.CHANNEL_LANGUAGE}")
 
     import concurrent.futures
+    import asyncio
+
     with concurrent.futures.ThreadPoolExecutor(max_workers=5) as ex:
         f1 = ex.submit(_google_trends,     profile)
         f2 = ex.submit(_hacker_news,       profile)
         f3 = ex.submit(_google_news_rss,   profile)
         f4 = ex.submit(_wikipedia_trending)
         f5 = ex.submit(_youtube_trending,  profile)
-        f6 = ex.submit(_gemini_insight,    profile)
 
     all_topics = []
-    for f in [f1, f2, f3, f4, f5, f6]:
+    for f in [f1, f2, f3, f4, f5]:
         try: all_topics.extend(f.result())
         except Exception: pass
+
+    # Run async function
+    try:
+        gemini_topics = await _gemini_insight(profile)
+        all_topics.extend(gemini_topics)
+    except Exception: pass
 
     # Add profile's seed keywords as evergreen fallback
     all_topics += profile["keywords_seed"]
@@ -214,7 +221,7 @@ def pick_todays_topic(niche_id: str = None) -> dict:
     candidates = "\n".join(f"- {t}" for t in all_topics[:45])
     avoid_str  = "\n".join(f"- {t}" for t in recent[:20])
 
-    result = ask_json(f"""YouTube growth strategist for a {profile['label']} channel.
+    result = await ask_json(f"""YouTube growth strategist for a {profile['label']} channel.
 Audience: {profile['audience']} | Language: {config.CHANNEL_LANGUAGE}
 Tone: {profile['tone']}
 {strategy_ctx}
@@ -249,7 +256,7 @@ Return JSON:
     return result
 
 
-def generate_weekly_strategy(niche_id: str = None) -> dict:
+async def generate_weekly_strategy(niche_id: str = None) -> dict:
     niche_id = niche_id or config.CHANNEL_NICHE
     profile  = get_profile(niche_id)
     perf     = db.get_performance_data()
@@ -260,7 +267,7 @@ def generate_weekly_strategy(niche_id: str = None) -> dict:
         for v in sorted(perf, key=lambda x: x["views"], reverse=True)[:5]
     ) if perf else "  No data yet"
 
-    result = ask_json(f"""YouTube strategist for {profile['label']} channel.
+    result = await ask_json(f"""YouTube strategist for {profile['label']} channel.
 Language: {config.CHANNEL_LANGUAGE}
 Recent videos: {recent[:8]}
 Top performers:\n{top_str}

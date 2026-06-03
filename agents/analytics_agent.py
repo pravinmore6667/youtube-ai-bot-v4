@@ -32,7 +32,7 @@ def collect_all_analytics():
     return updated
 
 
-def analyse_and_learn() -> dict:
+async def analyse_and_learn() -> dict:
     """
     Deep performance analysis using Gemini.
     Returns actionable insights to update strategy.
@@ -50,7 +50,7 @@ def analyse_and_learn() -> dict:
     ])
 
     log.info("🧠 Analysing performance with Gemini...")
-    result = ask_json(f"""YouTube channel performance analyst.
+    result = await ask_json(f"""YouTube channel performance analyst.
 Channel: {config.CHANNEL_NAME} | Niche: {config.CHANNEL_NICHE}
 
 Video performance data:

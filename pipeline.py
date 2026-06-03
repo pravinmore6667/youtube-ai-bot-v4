@@ -94,7 +94,10 @@ def run(manual_topic: str = None) -> dict:
                 agent_start(job_id, "StrategyAgent")
                 agent_done(job_id, "StrategyAgent", summary=manual_topic)
             else:
-                topic = _step(job_id, "StrategyAgent", pick_todays_topic, config.CHANNEL_NICHE)
+                import asyncio
+                def _run_pick_topic(*args, **kwargs):
+                    return asyncio.run(pick_todays_topic(*args, **kwargs))
+                topic = _step(job_id, "StrategyAgent", _run_pick_topic, config.CHANNEL_NICHE)
             save_checkpoint("topic", topic)
         else:
             topic = cp_topic

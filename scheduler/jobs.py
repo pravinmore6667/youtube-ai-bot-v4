@@ -33,8 +33,9 @@ def job_collect_analytics():
 def job_deep_analysis():
     log.info("🧠 Running deep performance analysis + learning...")
     from agents.analytics_agent import analyse_and_learn
+    import asyncio
 
-    insights = analyse_and_learn()
+    insights = asyncio.run(analyse_and_learn())
 
     if insights:
         log.info(
@@ -47,8 +48,9 @@ def job_weekly_strategy():
     log.info("📅 Weekly strategy review")
 
     from agents.strategy_agent import generate_weekly_strategy
+    import asyncio
 
-    generate_weekly_strategy()
+    asyncio.run(generate_weekly_strategy())
     job_deep_analysis()
 
 

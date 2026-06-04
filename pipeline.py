@@ -199,10 +199,17 @@ def run(manual_topic: str = None) -> dict:
 
         import time
         import psutil
+        from agents.editing_engine import AIEditingEngine
 
         def _do_video():
             if video_path: return video_path
             start_render = time.time()
+
+            # Apply dynamic pacing via AIEditingEngine
+            engine = AIEditingEngine(script)
+            asyncio.run(engine.analyze_pacing())
+            script["_pacing_plan"] = engine.pacing_plan
+
             v = _step(job_id, "VideoAgent", build_video, audio_path, script, job_id)
             job["render_duration"] = time.time() - start_render
             save_checkpoint("video_render", {"video_path": v})

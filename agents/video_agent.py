@@ -50,6 +50,11 @@ def _fetch_music(mood: str = "ambient background") -> str | None:
     return None
 
 
+def _intelligent_clip_selector(query: str, dest: str) -> str | None:
+    import asyncio
+    from agents.video_quality_agent import generate_and_select_best_clip
+    return asyncio.run(generate_and_select_best_clip(query, dest))
+
 def _get_clip_for_query(query: str, dest: str) -> str | None:
     from utils.stock_router import get_stock_video
     import time
@@ -161,7 +166,7 @@ def build_video(audio_path: str, script: dict, job_id: str) -> str:
                 for i, section in enumerate(sections):
                     query = (section.get("broll_cue") or section.get("heading") or config.CHANNEL_NICHE)
                     query = query[:60].split(",")[0].strip()
-                    clip_futures[clip_ex.submit(_get_clip_for_query, query, tmp)] = i
+                    clip_futures[clip_ex.submit(_intelligent_clip_selector, query, tmp)] = i
 
             clip_paths = {}
             for future in cf2.as_completed(clip_futures):

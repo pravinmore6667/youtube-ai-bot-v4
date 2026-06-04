@@ -23,11 +23,20 @@ class Config:
     MISTRAL_API_KEY     = os.getenv("MISTRAL_API_KEY",     "")
     GROK_API_KEY        = os.getenv("GROK_API_KEY",        "")
     NVIDIA_API_KEY      = os.getenv("NVIDIA_API_KEY",      "")
+    CEREBRAS_API_KEY    = os.getenv("CEREBRAS_API_KEY",    "")
+    OPENROUTER_API_KEY  = os.getenv("OPENROUTER_API_KEY",  "")
+    FLUX_API_KEY        = os.getenv("FLUX_API_KEY",        "")
+    SDXL_API_KEY        = os.getenv("SDXL_API_KEY",        "")
 
     # ── Always-Free Fallbacks ────────────────────────────────
     POLLINATIONS_ENABLED = os.getenv("POLLINATIONS_ENABLED", "true").lower() == "true"
     PUTER_ENABLED        = os.getenv("PUTER_ENABLED",        "true").lower() == "true"
     AI_HORDE_ENABLED     = os.getenv("AI_HORDE_ENABLED",     "true").lower() == "true"
+    OLLAMA_URL           = os.getenv("OLLAMA_URL",           "")
+    XTTS_URL             = os.getenv("XTTS_URL",             "")
+    PIPER_URL            = os.getenv("PIPER_URL",            "")
+    WHISPER_URL          = os.getenv("WHISPER_URL",          "")
+    COMFYUI_URL          = os.getenv("COMFYUI_URL",          "")
 
     # ── PAID PROVIDERS — BLOCKED ──────────────────────────────
     # Together AI, DeepInfra, SambaNova are not part of the approved
@@ -181,9 +190,12 @@ def check_keys():
         Config.MISTRAL_API_KEY and not Config.MISTRAL_API_KEY.startswith("your_"),
         Config.GROK_API_KEY and not Config.GROK_API_KEY.startswith("your_"),
         Config.NVIDIA_API_KEY and not Config.NVIDIA_API_KEY.startswith("your_"),
+        Config.CEREBRAS_API_KEY and not Config.CEREBRAS_API_KEY.startswith("your_"),
+        Config.OPENROUTER_API_KEY and not Config.OPENROUTER_API_KEY.startswith("your_"),
         Config.POLLINATIONS_ENABLED,
         Config.PUTER_ENABLED,
         Config.AI_HORDE_ENABLED,
+        Config.OLLAMA_URL,
     ])
 
     if not has_free_provider:

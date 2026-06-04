@@ -57,6 +57,12 @@ def banner():
         providers.append("Grok")
     if config.NVIDIA_API_KEY and not config.NVIDIA_API_KEY.startswith("your_"):
         providers.append("NVIDIA")
+    if config.CEREBRAS_API_KEY and not config.CEREBRAS_API_KEY.startswith("your_"):
+        providers.append("Cerebras")
+    if config.OPENROUTER_API_KEY and not config.OPENROUTER_API_KEY.startswith("your_"):
+        providers.append("OpenRouter")
+    if config.OLLAMA_URL:
+        providers.append("Ollama")
     if config.POLLINATIONS_ENABLED:
         providers.append("Pollinations")
     if config.AI_HORDE_ENABLED:
@@ -153,6 +159,15 @@ def _startup_self_test() -> dict:
     if C.NVIDIA_API_KEY and not C.NVIDIA_API_KEY.startswith("your_"):
         free_providers_found.append("NVIDIA")
         passed.append("PROVIDER: NVIDIA API key present (optional free tier)")
+    if C.CEREBRAS_API_KEY and not C.CEREBRAS_API_KEY.startswith("your_"):
+        free_providers_found.append("Cerebras")
+        passed.append("PROVIDER: Cerebras API key present")
+    if C.OPENROUTER_API_KEY and not C.OPENROUTER_API_KEY.startswith("your_"):
+        free_providers_found.append("OpenRouter")
+        passed.append("PROVIDER: OpenRouter API key present")
+    if getattr(C, 'OLLAMA_URL', None):
+        free_providers_found.append("Ollama")
+        passed.append("PROVIDER: Ollama local API present")
     if C.POLLINATIONS_ENABLED:
         free_providers_found.append("Pollinations")
         passed.append("PROVIDER: Pollinations enabled (always-free)")
@@ -254,8 +269,11 @@ def main():
         Config.MISTRAL_API_KEY and not Config.MISTRAL_API_KEY.startswith("your_"),
         Config.GROK_API_KEY and not Config.GROK_API_KEY.startswith("your_"),
         Config.NVIDIA_API_KEY and not Config.NVIDIA_API_KEY.startswith("your_"),
+        Config.CEREBRAS_API_KEY and not Config.CEREBRAS_API_KEY.startswith("your_"),
+        Config.OPENROUTER_API_KEY and not Config.OPENROUTER_API_KEY.startswith("your_"),
         Config.POLLINATIONS_ENABLED,
         Config.AI_HORDE_ENABLED,
+        getattr(Config, 'OLLAMA_URL', None)
     ])
     if not has_free:
         print(f"\n{Fore.RED}❌ CRITICAL STARTUP ERROR: No approved free AI providers configured.\n"

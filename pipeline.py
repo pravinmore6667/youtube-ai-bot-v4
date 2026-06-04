@@ -8,6 +8,13 @@ from utils.db_logger import get_logger, set_job, clear_job
 from agents.holistic_agent   import (init_job, agent_start, agent_done,
                                       job_complete, save_brainstorm_result)
 from agents.strategy_agent   import pick_todays_topic
+from agents.decision_agent import make_autonomous_decisions
+from agents.viral_intelligence_agent import analyze_viral_potential
+from agents.retention_agent import optimize_retention
+from agents.humanizer_agent import humanize_script
+from agents.algorithm_agent import optimize_for_algorithm
+from agents.thumbnail_intelligence_agent import generate_intelligent_thumbnail
+from agents.channel_memory_agent import get_channel_memory, save_channel_memory
 from agents.unified_agent    import generate as unified_generate
 from agents.voice_agent      import generate_voice
 from agents.video_agent      import build_video
@@ -56,9 +63,19 @@ def run(manual_topic: str = None) -> dict:
 
     try:
         # ── Checkpoints & Resuming ─────────────────────────────
+        import asyncio
+        if manual_topic:
+            decision_topic = asyncio.run(make_autonomous_decisions(manual_topic))
+            if decision_topic.get("title"):
+                manual_topic = decision_topic["title"]
+        else:
+            decision_topic = asyncio.run(make_autonomous_decisions(config.CHANNEL_NICHE))
+
         cp_topic = load_checkpoint("topic")
         if cp_topic and not manual_topic:
             manual_topic = cp_topic.get("title", cp_topic.get("topic"))
+
+        asyncio.run(analyze_viral_potential(manual_topic or config.CHANNEL_NICHE, ""))
 
         unified = load_checkpoint("unified")
 
@@ -123,6 +140,8 @@ def run(manual_topic: str = None) -> dict:
                 return asyncio.run(unified_generate(*args, **kwargs))
 
             unified = _step(job_id, "UnifiedAgent", _run_unified_generate, topic, job_id)
+            unified["optimized_narration"] = asyncio.run(humanize_script(unified.get("full_narration", "")))
+            unified["optimized_narration"] = asyncio.run(optimize_retention(unified.get("optimized_narration", "")))
             save_checkpoint("unified", unified)
 
         script = {
@@ -132,7 +151,7 @@ def run(manual_topic: str = None) -> dict:
             "hook":                   unified.get("hook", ""),
             "sections":               unified.get("sections", []),
             "outro":                  unified.get("outro", ""),
-            "full_narration":         unified.get("full_narration", ""),
+            "full_narration":         unified.get("optimized_narration") or unified.get("full_narration", ""),
             "word_count":             unified.get("word_count", 0),
             "estimated_duration_min": unified.get("estimated_duration_min", 6),
             "_unified_result":        unified,
@@ -197,7 +216,7 @@ def run(manual_topic: str = None) -> dict:
 
         def _do_thumb():
             if thumb_path: return thumb_path
-            t = _step(job_id, "ThumbnailAgent", generate_thumbnail, topic, job_id, brainstorm_compat)
+            t = _step(job_id, "ThumbnailAgent", lambda t_arg, j_arg, b_arg: asyncio.run(generate_intelligent_thumbnail(t_arg)), topic, job_id, brainstorm_compat)
             save_checkpoint("thumbnail", {"thumb_path": t})
             return t
 
@@ -230,6 +249,8 @@ def run(manual_topic: str = None) -> dict:
             "word_count": script["word_count"], "estimated_duration": script["estimated_duration_min"],
             "keywords": topic.get("keywords",[]), "job_id": job_id
         }
+
+        upload_data = asyncio.run(optimize_for_algorithm(upload_data))
 
         # ── 6. Upload ─────────────────────────────────────────
         start_upload = time.time()

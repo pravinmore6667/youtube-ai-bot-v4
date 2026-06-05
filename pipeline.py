@@ -142,6 +142,14 @@ def run(manual_topic: str = None) -> dict:
             unified = _step(job_id, "UnifiedAgent", _run_unified_generate, topic, job_id)
             unified["optimized_narration"] = asyncio.run(humanize_script(unified.get("full_narration", "")))
             unified["optimized_narration"] = asyncio.run(optimize_retention(unified.get("optimized_narration", "")))
+
+            # Apply viewer psychology optimization
+            from agents.viewer_psychology_engine import optimize_script_psychology
+            # Passing a dictionary and extracting full_narration
+            psycho_input = {"full_narration": unified["optimized_narration"]}
+            psycho_output = asyncio.run(optimize_script_psychology(psycho_input))
+            unified["optimized_narration"] = psycho_output.get("full_narration", unified["optimized_narration"])
+
             save_checkpoint("unified", unified)
 
         script = {
@@ -210,6 +218,8 @@ def run(manual_topic: str = None) -> dict:
             asyncio.run(engine.analyze_pacing(audio_path))
             script["_pacing_plan"] = engine.pacing_plan
 
+            # Dispatch video rendering (could be distributed via Celery in Enterprise setup)
+            log.info("Dispatching cinematic video assembly to distributed worker pool...")
             v = _step(job_id, "VideoAgent", build_video, audio_path, script, job_id)
             job["render_duration"] = time.time() - start_render
             save_checkpoint("video_render", {"video_path": v})

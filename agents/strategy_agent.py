@@ -262,6 +262,22 @@ async def pick_todays_topic(niche_id: str = None) -> dict:
     all_topics  = list(dict.fromkeys(all_topics))   # deduplicate, keep order
     random.shuffle(all_topics)
 
+    # NEW: Run trend prediction on top candidates to filter out saturated topics
+    try:
+        from agents.trend_prediction_engine import trend_engine
+        log.info("Running Enterprise Trend Prediction Engine on candidates...")
+        # Only check the first few to save time/API calls
+        for i, t in enumerate(all_topics[:5]):
+            # Use the first couple of words of the topic as the keyword for trend prediction
+            kw = " ".join(t.split()[:3])
+            prediction = await trend_engine.predict_trend(kw, niche_id)
+            if prediction["status"] == "saturated" or prediction["recommendation"] == "Avoid":
+                log.warning(f"Trend Engine rejected '{t}' (Saturated/Declining).")
+                all_topics.remove(t)
+                all_topics.append(t) # Move to back of line
+    except Exception as e:
+        log.warning(f"Trend Prediction Engine error: {e}")
+
     recent   = db.get_recent_titles(30)
     strategy = db.get_current_strategy()
     perf     = db.get_performance_data()

@@ -98,34 +98,44 @@ async def generate_and_select_best_clip(prompt: str, dest: str) -> str | None:
     # In a real multi-provider setup, we would run _get_clip_for_query in parallel
     # with different keywords or engines.
 
-    clip_path = _get_clip_for_query(prompt, dest)
+    # To truly simulate Enterprise CV scene selection without heuristic faking,
+    # we will fetch multiple clips and rank them strictly by their CV output characteristics.
 
-    if clip_path:
-        # 1. Use real Computer Vision to score the clip
-        cv_stats = analyze_clip_cv(clip_path)
-        log.info(f"CV Clip Analysis Results: {cv_stats}")
+    # In a full Enterprise setup, we'd fire these off asynchronously to different providers.
+    # We will simulate fetching 2 clips and scoring them.
+    clip_1 = _get_clip_for_query(prompt, dest)
+    clip_2 = _get_clip_for_query(prompt + " cinematic", dest)
 
-        cv_score = cv_stats.get("cinematic_score", 50)
+    valid_clips = []
 
-        # 2. Use AI to score scene relevance based on prompt context
-        eval_prompt = f"""
-You are a Cinematic Quality Engine.
-We have retrieved a video clip for the prompt: "{prompt}".
-The clip's physical CV analysis shows a motion and contrast score of {cv_score}/100.
-Score its overall relevance and thematic fit on a scale of 0-100.
-Return ONLY the final average score as an integer (e.g., 85).
-"""
-        try:
-            ai_score_str = await ask(eval_prompt, is_fast=True)
-            ai_score = int(ai_score_str.strip())
+    if clip_1:
+        stats = analyze_clip_cv(clip_1)
+        if "error" not in stats:
+            # Objective CV scoring based on contrast and motion
+            score = stats.get("contrast", 0) + stats.get("motion", 0)
+            valid_clips.append((score, clip_1, stats))
 
-            # Combine real CV score with AI thematic score
-            final_score = int((cv_score + ai_score) / 2)
-            log.success(f"Selected clip {clip_path} with final cinematic score: {final_score}/100 (CV: {cv_score}, AI: {ai_score})")
-        except Exception:
-            log.success(f"Selected clip {clip_path} with CV cinematic score: {cv_score}/100")
+    if clip_2 and clip_2 != clip_1:
+        stats = analyze_clip_cv(clip_2)
+        if "error" not in stats:
+            score = stats.get("contrast", 0) + stats.get("motion", 0)
+            valid_clips.append((score, clip_2, stats))
 
-        return clip_path
+    if valid_clips:
+        # Sort by CV score descending
+        valid_clips.sort(key=lambda x: x[0], reverse=True)
+        best_score, best_clip, best_stats = valid_clips[0]
 
-    log.warning(f"Tournament failed to yield any clips for prompt: '{prompt[:50]}'")
+        log.success(f"Tournament Winner Selected: {best_clip} with pure CV physical score: {best_score:.1f}")
+
+        # Cleanup losing clips to save disk space
+        for score, clip, stats in valid_clips[1:]:
+            try:
+                os.remove(clip)
+            except:
+                pass
+
+        return best_clip
+
+    log.warning(f"Tournament failed to yield any valid CV clips for prompt: '{prompt[:50]}'")
     return None

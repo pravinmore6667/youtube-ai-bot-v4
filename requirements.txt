@@ -66,3 +66,7 @@ librosa>=0.10.2
 transformers>=4.44.2
 torch>=2.4.1
 ultralytics>=8.2.98
+
+pytrends==4.9.2
+scikit-learn>=1.5.1
+xgboost>=2.1.1

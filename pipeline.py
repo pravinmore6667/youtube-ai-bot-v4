@@ -205,9 +205,9 @@ def run(manual_topic: str = None) -> dict:
             if video_path: return video_path
             start_render = time.time()
 
-            # Apply dynamic pacing via AIEditingEngine
+            # Apply dynamic pacing via AIEditingEngine using actual audio path
             engine = AIEditingEngine(script)
-            asyncio.run(engine.analyze_pacing())
+            asyncio.run(engine.analyze_pacing(audio_path))
             script["_pacing_plan"] = engine.pacing_plan
 
             v = _step(job_id, "VideoAgent", build_video, audio_path, script, job_id)

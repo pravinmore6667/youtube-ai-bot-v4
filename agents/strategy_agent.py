@@ -30,23 +30,79 @@ log = get_logger("StrategyAgent")
 # ─── 1. Google Trends ────────────────────────────────────────
 
 def _google_trends(profile: dict) -> list[str]:
+    """Fetch live trend velocity and keywords from Google Trends."""
     try:
         kw   = profile["keywords_seed"][0]
         geo  = "IN" if config.CHANNEL_LANGUAGE == "hi" else "US"
         hl   = "hi-IN" if config.CHANNEL_LANGUAGE == "hi" else "en-US"
         pt   = TrendReq(hl=hl, tz=330 if geo == "IN" else 360, timeout=(10, 30))
+
+        # 1. Related queries for the niche seed keyword
         pt.build_payload([kw], timeframe="now 7-d", geo=geo)
         related = pt.related_queries()
         topics  = []
-        for _, data in related.items():
+        if related and kw in related and related[kw]:
             for kind in ["top", "rising"]:
-                if data.get(kind) is not None:
-                    topics += data[kind]["query"].head(8).tolist()
-        log.info(f"  Google Trends: {len(topics)} topics")
-        return topics
+                if related[kw].get(kind) is not None:
+                    topics += related[kw][kind]["query"].head(8).tolist()
+
+        # 2. Trending searches right now (Daily Trends)
+        try:
+            trending_df = pt.trending_searches(pn='india' if geo == 'IN' else 'united_states')
+            if not trending_df.empty:
+                # Filter daily trends by our niche keywords to ensure relevance
+                daily_trends = trending_df[0].tolist()
+                kws = [k.lower() for k in profile.get("keywords_seed", [])]
+                for dt in daily_trends:
+                    if any(k in dt.lower() for k in kws):
+                        topics.append(dt)
+        except Exception as e:
+            log.warning(f"  Google Daily Trends fetch failed: {e}")
+
+        log.info(f"  Google Trends: {len(topics)} topics found before saturation")
+        return list(set(topics))
     except Exception as e:
         log.warning(f"  Google Trends: {e}")
         return []
+
+# ─── 1.5. Reddit Trend Scraping (Free JSON API) ───────────────
+def _reddit_trends(profile: dict) -> list[str]:
+    """Scrape Reddit for hot/rising topics in niche subreddits."""
+    import requests
+    topics = []
+    # Map niches to subreddits (could be in niche profile, hardcoded for now)
+    subreddits = {
+        "technology": "technology+gadgets+futurology",
+        "finance": "personalfinance+investing+CryptoCurrency",
+        "history": "AskHistorians+HistoryMemes",
+        "science": "science+space+Physics",
+        "health": "Health+Fitness+nutrition",
+        "gaming": "gaming+Games",
+        "documentary": "Documentaries"
+    }
+
+    niche = config.CHANNEL_NICHE
+    subs = subreddits.get(niche, "all")
+
+    try:
+        url = f"https://www.reddit.com/r/{subs}/hot.json?limit=15"
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AI-Bot/1.0"}
+        r = requests.get(url, headers=headers, timeout=10)
+
+        if r.status_code == 200:
+            data = r.json()
+            for post in data.get("data", {}).get("children", []):
+                title = post.get("data", {}).get("title", "")
+                score = post.get("data", {}).get("score", 0)
+                if title and score > 50: # Filter low-engagement
+                    topics.append(title)
+
+        log.info(f"  Reddit Trends: {len(topics)} topics")
+        return topics
+    except Exception as e:
+        log.warning(f"  Reddit Trends failed: {e}")
+        return []
+
 
 
 # ─── 2. Hacker News (no key, completely free) ────────────────
@@ -182,15 +238,16 @@ async def pick_todays_topic(niche_id: str = None) -> dict:
     import concurrent.futures
     import asyncio
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as ex:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=6) as ex:
         f1 = ex.submit(_google_trends,     profile)
         f2 = ex.submit(_hacker_news,       profile)
         f3 = ex.submit(_google_news_rss,   profile)
         f4 = ex.submit(_wikipedia_trending)
         f5 = ex.submit(_youtube_trending,  profile)
+        f6 = ex.submit(_reddit_trends,     profile)
 
     all_topics = []
-    for f in [f1, f2, f3, f4, f5]:
+    for f in [f1, f2, f3, f4, f5, f6]:
         try: all_topics.extend(f.result())
         except Exception: pass
 

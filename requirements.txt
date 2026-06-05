@@ -56,3 +56,13 @@ gTTS==2.5.1
 chromadb>=0.4.20
 celery>=5.3.0
 redis>=5.0.0
+
+# ── Enterprise ML & CV ────────────────────────────────────────
+opencv-python-headless>=4.10.0
+mediapipe>=0.10.14
+scikit-learn>=1.5.1
+xgboost>=2.1.1
+librosa>=0.10.2
+transformers>=4.44.2
+torch>=2.4.1
+ultralytics>=8.2.98

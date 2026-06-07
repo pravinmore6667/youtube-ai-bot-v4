@@ -15,6 +15,7 @@ from agents.humanizer_agent import humanize_script
 from agents.algorithm_agent import optimize_for_algorithm
 from agents.thumbnail_intelligence_agent import generate_intelligent_thumbnail
 from agents.channel_memory_agent import get_channel_memory, save_channel_memory
+from agents.shorts_agent import optimize_for_shorts
 from agents.unified_agent    import generate as unified_generate
 from agents.voice_agent      import generate_voice
 from agents.video_agent      import build_video
@@ -64,6 +65,8 @@ def run(manual_topic: str = None) -> dict:
     try:
         # ── Checkpoints & Resuming ─────────────────────────────
         import asyncio
+        channel_memory = asyncio.run(get_channel_memory(config.CHANNEL_NAME))
+        job["channel_memory"] = channel_memory
         if manual_topic:
             decision_topic = asyncio.run(make_autonomous_decisions(manual_topic))
             if decision_topic.get("title"):
@@ -142,6 +145,8 @@ def run(manual_topic: str = None) -> dict:
             unified = _step(job_id, "UnifiedAgent", _run_unified_generate, topic, job_id)
             unified["optimized_narration"] = asyncio.run(humanize_script(unified.get("full_narration", "")))
             unified["optimized_narration"] = asyncio.run(optimize_retention(unified.get("optimized_narration", "")))
+            if str(topic.get("format", "")).lower() == "shorts":
+                unified["optimized_narration"] = asyncio.run(optimize_for_shorts(unified.get("optimized_narration", ""), topic))
             save_checkpoint("unified", unified)
 
         script = {
@@ -332,6 +337,13 @@ def run(manual_topic: str = None) -> dict:
             "keywords":  topic.get("keywords", []),
             "video_url": upload_result["url"]
         })
+        asyncio.run(save_channel_memory({
+            "channel_id": config.CHANNEL_NAME,
+            "last_title": seo["title"],
+            "last_upload_time": now,
+            "niche": config.CHANNEL_NICHE
+        }))
+
         job_complete(job_id)
         clear_job()
 

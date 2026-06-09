@@ -8,6 +8,8 @@ from sklearn.ensemble import RandomForestRegressor
 from xgboost import XGBRegressor
 from router.ai_router import ask_json
 from utils.logger import get_logger
+from agents.strategy_agent import _reddit_trends, _google_trends, _youtube_trending
+from config import config
 
 log = get_logger("ViralIntelligenceAgent")
 
@@ -107,19 +109,49 @@ async def analyze_viral_potential(topic: str, script: str) -> Dict[str, Any]:
     score CTR probability, score emotional engagement, replay value,
     and retention. Calculate trend momentum.
     """
+    log.info(f"Gathering external trend data for topic: {topic[:50]}")
+
+    # Setup mock profile for trend fetching based on topic
+    profile = {
+        "keywords_seed": [topic],
+        "news_queries": [topic],
+        "yt_category": "28"
+    }
+
+    try:
+        reddit_trends = _reddit_trends(profile)
+    except Exception:
+        reddit_trends = []
+
+    try:
+        google_trends = _google_trends(profile)
+    except Exception:
+        google_trends = []
+
+    try:
+        youtube_trends = _youtube_trending(profile)
+    except Exception:
+        youtube_trends = []
+
     prompt = f"""
 You are a highly advanced YouTube Viral Prediction Engine.
 Your task is to deeply analyze the following video topic and script outline and predict its viral potential.
 You must factor in:
 - Viral probability
-- Trend momentum
-- Competition density
+- Trend momentum (via Google Trends and Reddit data)
+- Competition density (via YouTube metadata analysis and Competitor transcripts)
 - Emotional impact
 - Replay probability
 - CTR probability
 
 Topic: {topic}
 Script snippet (or empty): {script[:1000]}
+
+--- Live Trend Data ---
+Reddit Trends: {reddit_trends[:5]}
+Google Trends: {google_trends[:5]}
+YouTube Competition: {youtube_trends[:5]}
+-----------------------
 
 You must return a valid JSON object strictly matching this schema:
 {{

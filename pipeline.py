@@ -14,6 +14,7 @@ from agents.retention_agent import optimize_retention
 from agents.humanizer_agent import humanize_script
 from agents.algorithm_agent import optimize_for_algorithm
 from agents.thumbnail_intelligence_agent import generate_intelligent_thumbnail
+from agents.shorts_agent import optimize_for_shorts
 from agents.channel_memory_agent import get_channel_memory, save_channel_memory
 from agents.unified_agent    import generate as unified_generate
 from agents.voice_agent      import generate_voice

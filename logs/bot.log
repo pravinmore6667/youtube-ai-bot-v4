@@ -83,3 +83,12 @@
 2026-06-04 17:38:04 | INFO    | GeminiPool           | Loaded 0 Gemini keys into pool.
 2026-06-04 17:40:07 | INFO    | GeminiPool           | Loaded 0 Gemini keys into pool.
 2026-06-04 17:44:58 | INFO    | GeminiPool           | Loaded 0 Gemini keys into pool.
+2026-06-08 03:51:23 | INFO    | GeminiPool           | Loaded 0 Gemini keys into pool.
+2026-06-08 03:51:30 | INFO    | GeminiPool           | Loaded 0 Gemini keys into pool.
+2026-06-08 03:51:32 | INFO    | matplotlib.font_manager | Failed to extract font properties from /usr/share/fonts/truetype/noto/NotoColorEmoji.ttf: Can not load face (unknown file format; error code 0x2)
+2026-06-08 03:51:32 | INFO    | matplotlib.font_manager | generated new fontManager
+2026-06-08 03:51:34 | WARNING | ChannelMemoryAgent   | ChromaDB not found. Vector memory will be simulated using local files.
+2026-06-08 04:01:33 | INFO    | GeminiPool           | Loaded 0 Gemini keys into pool.
+2026-06-08 04:01:35 | WARNING | ChannelMemoryAgent   | ChromaDB not found. Vector memory will be simulated using local files.
+2026-06-08 04:06:00 | INFO    | GeminiPool           | Loaded 0 Gemini keys into pool.
+2026-06-08 04:06:01 | WARNING | ChannelMemoryAgent   | ChromaDB not found. Vector memory will be simulated using local files.

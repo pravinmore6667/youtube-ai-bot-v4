@@ -9,6 +9,11 @@ from xgboost import XGBRegressor
 from router.ai_router import ask_json
 from utils.logger import get_logger
 
+try:
+    import praw
+except ImportError:
+    praw = None
+
 log = get_logger("ViralIntelligenceAgent")
 
 class TrueMLScorer:
@@ -101,6 +106,48 @@ class TrueMLScorer:
 
 ml_scorer = TrueMLScorer()
 
+def check_google_trends(topic: str) -> str:
+    try:
+        from pytrends.request import TrendReq
+        pytrend = TrendReq()
+        pytrend.build_payload(kw_list=[topic[:100]]) # Pytrends limits keyword length
+        data = pytrend.interest_over_time()
+        if not data.empty and topic[:100] in data.columns:
+            recent_interest = data[topic[:100]].tail(7).mean()
+            if recent_interest > 75: return "High"
+            if recent_interest > 40: return "Medium"
+        return "Low"
+    except Exception as e:
+        log.warning(f"Google Trends fetch failed: {e}")
+        return "Medium"
+
+def check_reddit_trends(topic: str) -> str:
+    if not praw:
+        return "Medium"
+    try:
+        # Replace with your actual credentials in a real enterprise app.
+        # Using generic/anonymous for public read-only fallback if allowed, or skipping.
+        # A properly configured bot would pull these from config.
+        reddit = praw.Reddit(client_id=os.environ.get("REDDIT_CLIENT_ID", "dummy_id"),
+                             client_secret=os.environ.get("REDDIT_CLIENT_SECRET", "dummy_secret"),
+                             user_agent="yt_ai_bot/1.0")
+
+        # Attempting a simple search
+        subreddits = reddit.subreddit("all")
+        search_results = list(subreddits.search(topic, sort="hot", limit=10))
+
+        total_score = sum(post.score for post in search_results)
+
+        if total_score > 50000:
+            return "High"
+        elif total_score > 10000:
+            return "Medium"
+        return "Low"
+
+    except Exception as e:
+        log.warning(f"Reddit trend fetch failed: {e}")
+        return "Medium"
+
 async def analyze_viral_potential(topic: str, script: str) -> Dict[str, Any]:
     """
     Predict viral potential, analyze trending competitors implicitly,
@@ -133,6 +180,15 @@ You must return a valid JSON object strictly matching this schema:
 }}
 """
     log.info(f"Analyzing viral potential for topic: {topic[:50]}")
+
+    # Fetch actual real-world momentum using pytrends and praw
+    g_momentum = check_google_trends(topic)
+    r_momentum = check_reddit_trends(topic)
+
+    overall_momentum = "High" if "High" in (g_momentum, r_momentum) else \
+                       ("Medium" if "Medium" in (g_momentum, r_momentum) else "Low")
+    log.info(f"Real Trend Momentum: Google={g_momentum}, Reddit={r_momentum} -> Overall={overall_momentum}")
+
     try:
         # 1. Use Real ML/Heuristic Scoring
         ml_scores = ml_scorer.predict(topic, script)
@@ -146,6 +202,7 @@ You must return a valid JSON object strictly matching this schema:
             result["viral_score"] = ml_scores["viral_score"]
             result["ctr_score"] = ml_scores["ctr_score"]
             result["retention_score"] = ml_scores["retention_score"]
+            result["trend_momentum"] = overall_momentum # override with real stats
 
             log.success(f"Final Viral Analysis Complete. ML Score: {result.get('viral_score')}/100")
             return result
@@ -160,7 +217,7 @@ You must return a valid JSON object strictly matching this schema:
         "ctr_score": fallback_scores["ctr_score"],
         "retention_score": fallback_scores["retention_score"],
         "emotional_impact_score": 85,
-        "trend_momentum": "High",
+        "trend_momentum": overall_momentum,
         "competition_density": "Medium",
         "analysis_notes": "Qualitative analysis failed. Using pure ML statistical predictions."
     }
